@@ -1,110 +1,50 @@
-const WebSocket = require("ws");
+const WebSocket = require('ws');
 
-const port = process.env.PORT || 3000;
-const wss = new WebSocket.Server({ port });
+const wss = new WebSocket.Server({ port: 3000 });
 
-let users = {};    // username -> ws
-let friends = {};  // username -> [friends]
-let blocked = {};  // username -> [blocked]
+let users = {};   // { username: ws }
+let chats = {};   // { username: [messages] }
 
-function ensureUser(name) {
-  if (!friends[name]) friends[name] = [];
-  if (!blocked[name]) blocked[name] = [];
-}
+wss.on('connection', function connection(ws) {
+    ws.on('message', function incoming(message) {
+        try {
+            const data = JSON.parse(message);
 
-wss.on("connection", (ws) => {
-  console.log("📲 Новый клиент подключился");
+            if (data.type === 'register') {
+                const username = data.username;
+                users[username] = ws;
+                chats[username] = [{ from: username, text: "чат «сохранённое» создан!" }];
+                ws.send(JSON.stringify({ type: 'system', message: 'сохранённый чат создан' }));
+            }
 
-  ws.on("message", (msg) => {
-    try {
-      const data = JSON.parse(msg);
+            if (data.type === 'message') {
+                const to = data.to;
+                const from = data.from;
+                const text = data.text;
 
-      // 🔹 Регистрация
-      if (data.type === "register") {
-        if (!data.username.startsWith("@")) {
-          ws.send(JSON.stringify({ error: "Username must start with @" }));
-          return;
+                // сохраняем в чат отправителя
+                if (!chats[from]) chats[from] = [];
+                chats[from].push({ from, text });
+
+                // сохраняем у получателя и отправляем
+                if (!chats[to]) chats[to] = [];
+                chats[to].push({ from, text });
+
+                if (users[to]) {
+                    users[to].send(JSON.stringify({ type: 'message', from, text }));
+                }
+            }
+        } catch (err) {
+            console.log('Ошибка обработки сообщения:', err);
         }
-        users[data.username] = ws;
-        ensureUser(data.username);
-        ws.send(
-          JSON.stringify({ type: "registered", username: data.username })
-        );
-        console.log(`✅ Зарегистрирован: ${data.username}`);
-      }
+    });
 
-      // 🔹 Поиск
-      if (data.type === "search") {
-        const found = users[data.username] ? true : false;
-        ws.send(
-          JSON.stringify({
-            type: "search_result",
-            username: data.username,
-            found,
-          })
-        );
-      }
-
-      // 🔹 Сообщения
-      if (data.type === "message") {
-        const to = data.to;
-        ensureUser(to);
-        if (blocked[to] && blocked[to].includes(data.from)) {
-          console.log(`🚫 ${data.from} заблокирован у ${to}`);
-          return;
+    ws.on('close', () => {
+        // удаляем пользователя из списка
+        for (let u in users) {
+            if (users[u] === ws) delete users[u];
         }
-        const targetWs = users[to];
-        if (targetWs && targetWs.readyState === WebSocket.OPEN) {
-          targetWs.send(
-            JSON.stringify({
-              type: "message",
-              from: data.from,
-              message: data.message,
-            })
-          );
-        } else {
-          ws.send(JSON.stringify({ error: "User offline" }));
-        }
-      }
-
-      // 🔹 Добавить в друзья
-      if (data.type === "add_friend") {
-        ensureUser(data.from);
-        ensureUser(data.to);
-        if (!friends[data.from].includes(data.to)) {
-          friends[data.from].push(data.to);
-        }
-        ws.send(
-          JSON.stringify({
-            type: "friend_added",
-            friend: data.to,
-          })
-        );
-      }
-
-      // 🔹 Заблокировать
-      if (data.type === "block_user") {
-        ensureUser(data.from);
-        if (!blocked[data.from].includes(data.to)) {
-          blocked[data.from].push(data.to);
-        }
-        ws.send(
-          JSON.stringify({
-            type: "user_blocked",
-            blocked: data.to,
-          })
-        );
-      }
-    } catch (e) {
-      console.log("Ошибка:", e.message);
-    }
-  });
-
-  ws.on("close", () => {
-    for (let u in users) {
-      if (users[u] === ws) delete users[u];
-    }
-  });
+    });
 });
 
-console.log(`🌐 lumialink сервер запущен на порту ${port}`);
+console.log('Server running on ws://localhost:3000');
