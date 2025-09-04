@@ -1,80 +1,28 @@
-const express = require('express');
-const axios = require('axios');
-const bodyParser = require('body-parser');
+const WebSocket = require('ws');
+const wss = new WebSocket.Server({ port: 3000 });
+const { Client } = require('pg');
+const WebSocket = require('ws');
 
-const app = express();
-app.use(bodyParser.json());
-
-const LLD_API_URL = 'https://lldbapi.onrender.com';
-const LLM_API_URL = 'https://llmapi-zau6.onrender.com';
-
-// Регистрация нового пользователя
-app.post('/register', async (req, res) => {
-    const { username, password } = req.body;
-    try {
-        const response = await axios.post(`${LLD_API_URL}/users`, {
-            username,
-            password
-        });
-        res.json(response.data);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
+const db = new Client({
+    connectionString: "postgresql://datalumiabaselink_user:MGeBsOZdrxxTbT1sVDd1oXlKOfvI7qBI@dpg-d2s5c1mmcj7s73fslto0-a/datalumiabaselink",
+    ssl: { rejectUnauthorized: false }
 });
 
-// Логин пользователя
-app.post('/login', async (req, res) => {
-    const { username, password } = req.body;
-    try {
-        const response = await axios.post(`${LLD_API_URL}/login`, {
-            username,
-            password
-        });
-        res.json(response.data);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
+db.connect()
+  .then(() => console.log("Postgres подключён"))
+  .catch(err => console.error("Ошибка подключения к Postgres:", err));
 
-// Получение сообщений
-app.get('/messages/:chatId', async (req, res) => {
-    const chatId = req.params.chatId;
-    try {
-        const response = await axios.get(`${LLD_API_URL}/messages/${chatId}`);
-        res.json(response.data);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
+wss.on('connection', ws => {
+  console.log('📲 Новый клиент подключился');
 
-// Отправка пуша
-app.post('/push', async (req, res) => {
-    const { title, body, userId } = req.body;
-    try {
-        const response = await axios.post(`${LLM_API_URL}/push`, {
-            title,
-            body,
-            userId
-        });
-        res.json(response.data);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
+  ws.on('message', message => {
+    console.log('Сообщение:', message.toString());
 
-// Статус онлайн
-app.post('/status', async (req, res) => {
-    const { userId, online } = req.body;
-    try {
-        const response = await axios.post(`${LLD_API_URL}/status`, {
-            userId,
-            online
-        });
-        res.json(response.data);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
+    // Отправляем всем подключенным клиентам
+    wss.clients.forEach(client => {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(message.toString());
+      }
+    });
+  });
 });
-
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
