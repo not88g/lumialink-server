@@ -1,38 +1,80 @@
-// Подключаем postgres
-const { Pool } = require('pg');
+const express = require('express');
+const axios = require('axios');
+const bodyParser = require('body-parser');
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL, // Render сам подставит
-  ssl: { rejectUnauthorized: false }
-});
+const app = express();
+app.use(bodyParser.json());
 
-// Регистрация
+const LLD_API_URL = 'https://lldbapi.onrender.com';
+const LLM_API_URL = 'https://llmapi-zau6.onrender.com';
+
+// Регистрация нового пользователя
 app.post('/register', async (req, res) => {
-  const { username, password } = req.body;
-  try {
-    const exists = await pool.query('SELECT * FROM users WHERE username = $1', [username]);
-    if (exists.rows.length > 0) {
-      return res.status(400).json({ error: 'Пользователь уже существует' });
+    const { username, password } = req.body;
+    try {
+        const response = await axios.post(`${LLD_API_URL}/users`, {
+            username,
+            password
+        });
+        res.json(response.data);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
     }
-    await pool.query('INSERT INTO users (username, password) VALUES ($1, $2)', [username, password]);
-    res.json({ success: true });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Ошибка регистрации' });
-  }
 });
 
-// Вход
+// Логин пользователя
 app.post('/login', async (req, res) => {
-  const { username, password } = req.body;
-  try {
-    const result = await pool.query('SELECT * FROM users WHERE username = $1 AND password = $2', [username, password]);
-    if (result.rows.length === 0) {
-      return res.status(400).json({ error: 'Неверные данные' });
+    const { username, password } = req.body;
+    try {
+        const response = await axios.post(`${LLD_API_URL}/login`, {
+            username,
+            password
+        });
+        res.json(response.data);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
     }
-    res.json({ success: true });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Ошибка входа' });
-  }
 });
+
+// Получение сообщений
+app.get('/messages/:chatId', async (req, res) => {
+    const chatId = req.params.chatId;
+    try {
+        const response = await axios.get(`${LLD_API_URL}/messages/${chatId}`);
+        res.json(response.data);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Отправка пуша
+app.post('/push', async (req, res) => {
+    const { title, body, userId } = req.body;
+    try {
+        const response = await axios.post(`${LLM_API_URL}/push`, {
+            title,
+            body,
+            userId
+        });
+        res.json(response.data);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Статус онлайн
+app.post('/status', async (req, res) => {
+    const { userId, online } = req.body;
+    try {
+        const response = await axios.post(`${LLD_API_URL}/status`, {
+            userId,
+            online
+        });
+        res.json(response.data);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
