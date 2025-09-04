@@ -1,7 +1,6 @@
 const WebSocket = require('ws');
 const wss = new WebSocket.Server({ port: 3000 });
 const { Client } = require('pg');
-const WebSocket = require('ws');
 
 const db = new Client({
     connectionString: "postgresql://datalumiabaselink_user:MGeBsOZdrxxTbT1sVDd1oXlKOfvI7qBI@dpg-d2s5c1mmcj7s73fslto0-a/datalumiabaselink",
@@ -26,3 +25,4 @@ wss.on('connection', ws => {
     });
   });
 });
+
